@@ -38,4 +38,5 @@ To teach Sentinel new things, you need to "feed" it URLs.
 -   **Frontend**: Next.js & Three.js.
 
 ---
-*Built with ❤️ by the Sentinel Team*
+*Built with ❤️ by [@Om7035](https://github.com/Om7035)
+
