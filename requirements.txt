@@ -1,0 +1,61 @@
+# Python dependencies for Sentinel
+
+# Core Framework
+langchain>=0.1.0
+langgraph>=0.0.20
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Database Drivers
+neo4j>=5.14.0
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.23
+alembic>=1.13.0
+
+# Web Scraping
+firecrawl-py>=0.0.5
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# LLM Integration
+ollama>=0.1.0
+langchain-community>=0.0.10
+litellm>=1.0.0  # Model-agnostic LLM API
+instructor>=0.4.0  # Output-strict schema enforcement
+
+# API Framework
+fastapi>=0.108.0
+uvicorn>=0.25.0
+python-multipart>=0.0.6
+celery>=5.3.0
+redis>=5.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+httpx>=0.25.0
+aiohttp>=3.9.0
+tenacity>=8.2.3
+
+# Logging & Monitoring
+structlog>=23.2.0
+python-json-logger>=2.0.7
+
+# Data Processing
+numpy>=1.26.0
+pandas>=2.1.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Code Quality
+black>=23.12.0
+ruff>=0.1.8
+mypy>=1.7.0
+types-requests>=2.31.0
+
+# Development
+ipython>=8.18.0
+ipdb>=0.13.13
