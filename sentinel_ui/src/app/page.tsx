@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 
 // Dynamically import ForceGraph3D to avoid SSR issues
@@ -12,6 +12,12 @@ interface Node {
   id: string;
   name: string;
   val: number;
+  x?: number;
+  y?: number;
+  z?: number;
+  fx?: number | null;
+  fy?: number | null;
+  fz?: number | null;
 }
 
 interface Link {
