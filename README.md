@@ -1,18 +1,43 @@
-# Sentinel - The Self-Healing Knowledge Graph
+# 🧠 Sentinel - The Self-Healing Knowledge Graph
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Next.js](https://img.shields.io/badge/Next.js-13+-black.svg)](https://nextjs.org/)
+[![Neo4j](https://img.shields.io/badge/Neo4j-5.0+-blue.svg)](https://neo4j.com/)
 
-A production-grade, self-healing knowledge graph system with temporal validity tracking, built on Neo4j, LangChain, and Firecrawl.
+**Sentinel** is a production-grade, self-healing knowledge graph system that automatically extracts, stores, and visualizes knowledge from the web. It combines temporal validity tracking, intelligent fact extraction, and autonomous healing to keep your knowledge base fresh and accurate.
 
-## 🌟 Features
+### 🎯 In Simple Terms
+Sentinel is like a **smart librarian that reads websites, extracts facts, visualizes connections, and keeps everything up-to-date automatically**. Built on Neo4j, Firecrawl, and LLMs.
 
-- **Temporal Validity Tracking**: Time-travel queries to see how knowledge evolved
-- **Self-Healing**: Autonomous detection and correction of stale information
-- **Idempotent Ingestion**: Content-hash based deduplication prevents duplicate writes
-- **LLM-Powered Extraction**: Uses local Ollama models for entity/relationship extraction
-- **RESTful API**: FastAPI backend with real-time graph visualization
-- **Modern UI**: Next.js dashboard with 3D force-directed graph
+## 🌟 Key Features
+
+| Feature | What It Does |
+|---------|-------------|
+| **⏰ Temporal Validity** | See how knowledge evolved over time - time-travel queries |
+| **🔄 Self-Healing** | Automatically detects and corrects stale information |
+| **🚫 Idempotent Ingestion** | SHA-256 hashing prevents duplicate data storage |
+| **🧠 LLM-Powered** | Local Ollama models extract entities and relationships |
+| **🔌 REST API** | FastAPI backend for easy integration |
+| **📊 3D Visualization** | Interactive neural network-style graph with draggable nodes |
+| **💾 Graph Database** | Neo4j for powerful relationship queries |
+| **🔐 Privacy-First** | All AI runs locally - no data sent to external services |
+
+### 🎬 What Happens Behind the Scenes
+
+```
+Website URL
+    ↓
+Firecrawl (Web Scraper) → Extracts clean text
+    ↓
+Ollama (Local AI) → Extracts facts & relationships
+    ↓
+Neo4j (Graph DB) → Stores with timestamps
+    ↓
+3D UI → Visualizes as interactive graph
+    ↓
+Self-Healing Agent → Keeps facts fresh automatically
+```
 
 ## 📁 Project Structure
 
@@ -195,63 +220,188 @@ pytest tests/test_phase1.py -v
 pytest --cov=sentinel_core --cov-report=html
 ```
 
-## 🏗️ Architecture
+## 🏗️ Architecture Overview
 
-### Sentinel Core (Library)
+### Three-Tier Architecture
 
-The core library is a standalone Python package that can be pip-installed. It provides:
+```
+┌─────────────────────────────────────────────────────────────┐
+│  TIER 1: USER INTERFACE (Next.js + React + Three.js)       │
+│  - 3D Graph Visualization                                   │
+│  - Draggable Nodes (Neurons)                               │
+│  - Time-Travel Slider                                       │
+│  - Natural Language Query Box                               │
+└─────────────────────────────────────────────────────────────┘
+                           ↕ HTTP/REST
+┌─────────────────────────────────────────────────────────────┐
+│  TIER 2: API LAYER (FastAPI)                               │
+│  - /api/ingest - Add URLs                                   │
+│  - /api/query - Ask questions                               │
+│  - /api/graph-snapshot - Get graph at time T               │
+│  - /api/stats - Statistics                                  │
+│  - /api/health - System status                              │
+└─────────────────────────────────────────────────────────────┘
+                           ↕
+┌─────────────────────────────────────────────────────────────┐
+│  TIER 3: CORE LOGIC (Python Library)                       │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ SentinelScraper (Firecrawl)                         │   │
+│  │ - Visits websites                                   │   │
+│  │ - Extracts clean text                              │   │
+│  │ - Hashes content (SHA-256)                         │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ InfoExtractor (Ollama + LangChain)                  │   │
+│  │ - Extracts entities & relationships                │   │
+│  │ - Assigns confidence scores                        │   │
+│  │ - Runs locally (no external AI calls)              │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ GraphManager (Neo4j Adapter)                        │   │
+│  │ - Stores facts with timestamps                     │   │
+│  │ - Manages temporal validity                        │   │
+│  │ - Supports time-travel queries                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Sentinel Orchestrator                              │   │
+│  │ - Coordinates all components                       │   │
+│  │ - Runs healing cycles                              │   │
+│  │ - Manages workflow                                 │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                           ↕
+┌─────────────────────────────────────────────────────────────┐
+│  EXTERNAL SERVICES                                          │
+│  • Firecrawl API (Web Scraping)                            │
+│  • Ollama (Local AI Model)                                 │
+│  • Neo4j Database (Graph Storage)                          │
+│  • PostgreSQL (Optional: Metadata)                         │
+└─────────────────────────────────────────────────────────────┘
+```
 
-1. **graph_store.py**: Neo4j adapter with temporal edge management
-2. **extractor.py**: LLM-based triple extraction using LangChain + Ollama
-3. **scraper.py**: Firecrawl integration with content hashing
-4. **orchestrator.py**: Main Sentinel class that coordinates healing
-5. **models.py**: Pydantic v2 data models
+### Component Details
 
-### Sentinel Service (API)
+#### 1. **Sentinel Core** (Python Library)
+The brain of the system. Handles all logic:
+- **graph_store.py**: Neo4j adapter with temporal edge management
+- **extractor.py**: LLM-based fact extraction using Ollama
+- **scraper.py**: Firecrawl integration with content hashing
+- **orchestrator.py**: Coordinates all components and healing cycles
+- **models.py**: Pydantic v2 data models
 
-FastAPI backend that exposes the core functionality via REST API:
+#### 2. **Sentinel Service** (FastAPI Backend)
+Exposes core functionality via REST API:
+- `POST /api/ingest` - Add new URL for analysis
+- `POST /api/query` - Ask natural language questions
+- `GET /api/graph-snapshot` - Get graph at specific time
+- `GET /api/stats` - Get statistics
+- `GET /api/health` - Health check
 
-- `/api/ingest`: Manually ingest a URL
-- `/api/query`: Natural language queries
-- `/api/graph-snapshot`: Get graph state (with optional time-travel)
-- `/api/stats`: Get graph statistics
-- `/api/health`: Health check
-
-### Sentinel UI (Frontend)
-
-Next.js 13+ dashboard with:
-
-- 3D force-directed graph visualization (react-force-graph-3d)
-- Real-time graph updates
+#### 3. **Sentinel UI** (Next.js Frontend)
+Interactive 3D visualization:
+- 3D force-directed graph (nodes repel/attract like magnets)
+- Draggable nodes (drag to rearrange)
+- Time-travel slider (see graph at any point in history)
 - Natural language query interface
-- Temporal navigation (time-travel slider)
+- Real-time updates
 
-## 📊 Key Concepts
+## 📊 Key Concepts Explained
 
-### Temporal Edges
+### 1. **Temporal Edges** ⏰
+Every fact in Sentinel has a timeline:
+```
+Fact: "Elon Musk is CEO of Tesla"
 
-Every relationship in the graph has:
-- `valid_from`: When the relationship became valid
-- `valid_to`: When it became invalid (NULL = still valid)
-- `last_verified`: Last time we confirmed it's still true
-- `content_hash`: SHA-256 hash for deduplication
+Timeline:
+2008-06-03: valid_from (became true)
+2022-08-09: valid_to (became false)
+2024-11-29: last_verified (last checked)
 
-### Self-Healing
+Result: You can ask "Show me the graph in 2015" 
+        and it will show Elon as CEO (because 2008 < 2015 < 2022)
+```
 
-The Sentinel agent:
-1. Finds stale URLs (not verified in > 7 days)
-2. Re-scrapes them using Firecrawl
-3. Extracts new triples with LLM
-4. Compares hashes and updates graph
-5. Runs autonomously every 6 hours (configurable)
+### 2. **Self-Healing** 🔄
+Sentinel automatically keeps facts fresh:
+```
+Every 6 hours:
+1. Find facts not verified in > 7 days
+2. Re-scrape original websites using Firecrawl
+3. Extract new facts using Ollama
+4. Compare content hashes
+5. Update graph if facts changed
+6. Report results
+```
 
-### Idempotent Ingestion
+### 3. **Idempotent Ingestion** 🚫
+No duplicate data, ever:
+```
+First ingest: "Tesla founded in 2003"
+  → Hash: abc123
+  → Store in graph
 
-When you ingest the same URL twice:
-- Content is hashed (SHA-256)
-- If hash matches existing edge: only update `last_verified`
-- If hash changed: invalidate old edge, create new edge
-- Zero wasted writes on unchanged content
+Second ingest: "Tesla founded in 2003"
+  → Hash: abc123 (SAME!)
+  → Skip (no duplicate)
+  → Just update last_verified
+
+Third ingest: "Tesla founded in 2004"
+  → Hash: xyz789 (DIFFERENT!)
+  → Mark old fact as invalid
+  → Store new fact
+```
+
+### 4. **Confidence Scoring** 📊
+AI isn't always 100% sure:
+```
+Extracted Fact: "Elon Musk founded SpaceX"
+Confidence: 0.95 (95% sure)
+
+Extracted Fact: "SpaceX is a company"
+Confidence: 0.99 (99% sure)
+
+Extracted Fact: "SpaceX has 9000 employees"
+Confidence: 0.70 (70% sure - might be outdated)
+```
+
+## 🛠️ Technologies Used
+
+### Backend Stack
+- **Python 3.11+**: Core language
+- **FastAPI**: REST API framework
+- **Neo4j**: Graph database for storing relationships
+- **Ollama**: Local LLM inference (Llama 3.1)
+- **LangChain**: LLM orchestration
+- **Firecrawl**: Web scraping API
+- **Pydantic v2**: Data validation
+- **SQLAlchemy**: ORM for metadata
+
+### Frontend Stack
+- **Next.js 13+**: React framework
+- **React**: UI library
+- **Three.js**: 3D graphics
+- **react-force-graph-3d**: 3D force-directed graph
+- **TailwindCSS**: Styling
+- **TypeScript**: Type safety
+
+### Infrastructure
+- **Docker & Docker Compose**: Containerization
+- **Neo4j**: Graph database
+- **PostgreSQL**: Metadata storage (optional)
+- **Redis**: Caching & task queue (optional)
+
+### Why These Technologies?
+
+| Tech | Why |
+|------|-----|
+| **Neo4j** | Perfect for storing relationships; queries are 10-100x faster than SQL |
+| **Firecrawl** | Handles JavaScript-rendered content; extracts clean text |
+| **Ollama** | Runs AI locally; no data leaves your machine |
+| **Three.js** | Beautiful 3D visualizations; GPU-accelerated |
+| **FastAPI** | Fast, modern, auto-generates API docs |
+| **Next.js** | Server-side rendering; great for SEO and performance |
+
+---
 
 ## 🐛 Troubleshooting
 
