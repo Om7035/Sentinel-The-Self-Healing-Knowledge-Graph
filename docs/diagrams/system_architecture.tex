@@ -1,0 +1,46 @@
+\documentclass[tikz,border=10pt]{standalone}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, calc, shadows}
+
+\begin{document}
+\begin{tikzpicture}[
+    node distance=2cm,
+    process/.style={rectangle, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!10, drop shadow},
+    storage/.style={cylinder, shape border rotate=90, draw=black, aspect=0.25, minimum height=2cm, minimum width=2cm, fill=yellow!10, text centered, drop shadow},
+    decision/.style={diamond, minimum width=2cm, minimum height=1cm, text centered, draw=black, fill=green!10, drop shadow},
+    arrow/.style={thick,->,>=stealth},
+    group/.style={draw=gray, dashed, inner sep=1em, rounded corners, fill=gray!5}
+]
+
+% Nodes
+\node (start) [process, fill=green!20] {User / CLI};
+\node (orchestrator) [process, below=of start, minimum width=4cm, fill=orange!20] {Sentinel Orchestrator};
+
+% Scraper Group
+\node (scraper) [process, below left=of orchestrator, xshift=-1cm] {Scraper (Firecrawl/Local)};
+\node (web) [cloud, draw, aspect=2, below=of scraper, fill=cyan!10] {The Web};
+
+% Extractor Group
+\node (extractor) [process, below right=of orchestrator, xshift=1cm] {Graph Extractor (LLM)};
+\node (llm) [process, below=of extractor, fill=purple!10] {LLM (Ollama/OpenAI)};
+
+% Storage
+\node (neo4j) [storage, below=of orchestrator, yshift=-4cm] {Neo4j Graph DB};
+
+% Edges
+\draw [arrow] (start) -- node[anchor=west] {watch(url)} (orchestrator);
+\draw [arrow] (orchestrator) -| node[anchor=south] {1. Scrape} (scraper);
+\draw [arrow] (scraper) -- node[anchor=west] {HTML/MD} (orchestrator);
+\draw [arrow] (scraper) -- (web);
+
+\draw [arrow] (orchestrator) -| node[anchor=south] {2. Extract} (extractor);
+\draw [arrow] (extractor) -- (llm);
+\draw [arrow] (llm) -- node[anchor=west] {JSON} (extractor);
+\draw [arrow] (extractor) -- node[anchor=east] {GraphData} (orchestrator);
+
+\draw [arrow] (orchestrator) -- node[anchor=west] {3. Upsert} (neo4j);
+
+% Healing Loop
+\draw [arrow, dashed, color=red] (neo4j.east) -- ++(1,0) |- node[anchor=south, rotate=90, pos=0.25] {4. Find Stale Nodes (Healing)} (orchestrator.east);
+
+\end{tikzpicture}
+\end{document}
