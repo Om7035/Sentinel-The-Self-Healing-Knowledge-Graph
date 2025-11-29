@@ -29,7 +29,7 @@ export default function GraphVisualization({ data }: GraphVisualizationProps) {
         linkLabel: "relation",
         linkWidth: 1.5,
         linkOpacity: 0.7,
-        nodeThreeObject: (node: { color?: string }) => {
+        nodeThreeObject: (node: { id?: string | number; x?: number; y?: number; z?: number; vx?: number; vy?: number; vz?: number; fx?: number; fy?: number; fz?: number; color?: string }) => {
             const sphere = new THREE.Mesh(
                 new THREE.SphereGeometry(5),
                 new THREE.MeshBasicMaterial({
