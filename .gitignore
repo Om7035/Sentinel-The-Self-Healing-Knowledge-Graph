@@ -109,3 +109,16 @@ neo4j_import/
 neo4j_plugins/
 postgres_data/
 data/
+
+# Generated files
+CLEANUP_COMPLETE.md
+PHASE1_COMPLETE.md
+PHASE3_COMPLETE.md
+REFACTORING_COMPLETE.md
+SETUP_COMPLETE.md
+SETUP_GUIDE.md
+test_output.txt
+debug_test.py
+verify_refactoring.py
+run_setup.py
+*.log
