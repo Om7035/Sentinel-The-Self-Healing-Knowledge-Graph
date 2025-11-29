@@ -70,15 +70,16 @@ dmypy.json
 *.log
 logs/
 
-# Next.js (sentinel_ui)
-sentinel_ui/.next/
-sentinel_ui/out/
-sentinel_ui/build/
-sentinel_ui/node_modules/
-sentinel_ui/.env*.local
+# Next.js (sentinel_platform/ui)
+sentinel_platform/ui/.next/
+sentinel_platform/ui/out/
+sentinel_platform/ui/build/
+sentinel_platform/ui/node_modules/
+sentinel_platform/ui/.env*.local
 
 # Node
 node_modules/
+**/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

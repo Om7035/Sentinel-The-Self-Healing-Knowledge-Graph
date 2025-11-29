@@ -1,7 +1,8 @@
 """
-GraphManager - Neo4j Temporal Knowledge Graph Manager
+GraphStore - Neo4j Temporal Knowledge Graph Storage
 
 Manages Neo4j connections and temporal edge operations for the Sentinel system.
+Provides both Neo4jStore (premium) and fallback implementations.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ class GraphException(Exception):
     pass
 
 
-class GraphManager:
+class Neo4jStore:
     """
     Manages Neo4j graph database operations with temporal validity tracking.
     
@@ -953,6 +954,14 @@ class GraphManager:
             logger.error("failed_to_find_stale_nodes", error=str(e))
             raise GraphException(f"Failed to find stale nodes: {e}") from e
 
+    def _to_iso(self, dt: Any) -> Optional[str]:
+        """Helper to safely convert datetime-like objects to ISO format string."""
+        if dt is None:
+            return None
+        if hasattr(dt, 'isoformat'):
+            return dt.isoformat()
+        return str(dt)
+
     def get_graph_snapshot(
         self,
         timestamp: Optional[datetime] = None,
@@ -1008,11 +1017,11 @@ class GraphManager:
                         "source": source_name,
                         "target": target_name,
                         "relation": record["relation_type"],
-                        "valid_from": record["valid_from"].isoformat() if record["valid_from"] else None,
-                        "valid_to": record["valid_to"].isoformat() if record["valid_to"] else None,
+                        "valid_from": self._to_iso(record["valid_from"]),
+                        "valid_to": self._to_iso(record["valid_to"]),
                         "confidence": record["confidence"],
                         "source_url": record["source_url"],
-                        "last_verified": record["last_verified"].isoformat() if record["last_verified"] else None,
+                        "last_verified": self._to_iso(record["last_verified"]),
                     })
                     
                 return {
@@ -1028,3 +1037,7 @@ class GraphManager:
         except Exception as e:
             logger.error("failed_to_get_graph_snapshot", error=str(e))
             raise GraphException(f"Failed to get graph snapshot: {e}") from e
+
+
+# Backward compatibility alias
+GraphManager = Neo4jStore

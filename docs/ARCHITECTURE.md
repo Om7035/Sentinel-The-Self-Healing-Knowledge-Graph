@@ -207,6 +207,25 @@ Shows the path: Elon Musk → FOUNDED → SpaceX
   - Confidence: 0.95
   ```
 
+### 2.5 **LiteLLM Routing Layer**
+- **What it does:** Acts as a universal adapter between Sentinel and any LLM provider (Ollama, OpenAI, Anthropic, Groq, etc.).
+- **Why it's needed:** Keeps the GraphExtractor code identical while letting you swap models/providers with a single config change.
+- **How it works:**
+  - `GraphExtractor` calls LiteLLM’s `completion` API
+  - LiteLLM forwards the prompt to whichever provider/model you configure
+  - Instructor sits on top to force the response into the `GraphData` schema
+- **Is LiteLLM an alternative to Ollama?** Not really. Think of LiteLLM as the *router* and Ollama (or OpenAI, Anthropic…) as the *engine*. By default we point LiteLLM at a local Ollama model (`ollama/llama3`), but you can retarget it to cloud models without touching application code.
+- **Provider matrix:**
+
+| Provider | Example Model Name | Notes |
+|----------|-------------------|-------|
+| Ollama (default) | `ollama/llama3` | Runs locally, zero-cost once downloaded |
+| OpenAI | `gpt-4o` | Requires API key, incurs usage-based cost |
+| Anthropic | `claude-3-opus` | Long context windows for research |
+| Groq | `groq/llama3-70b` | Ultra-low latency inference |
+
+Swap providers by changing `model_name` (and optionally `base_url`/`api_key`) when instantiating `GraphExtractor`.
+
 ### 3. **Neo4j** (Graph Database)
 - **What it does:** Stores facts as a network of connected nodes
 - **Why it's needed:** Relationships are as important as facts
@@ -285,6 +304,26 @@ Let's trace what happens when you submit a URL:
    Updates last_verified timestamp
    If facts changed, updates the graph
 ```
+
+### 🔁 End-to-End Data Pipeline
+
+```
+User URL/Input
+   ↓ (1) Firecrawl Scraper
+Clean Markdown/Text
+   ↓ (2) LiteLLM Router + Instructor
+Structured GraphData (nodes + temporal edges)
+   ↓ (3) GraphManager (Neo4j)
+Temporal Knowledge Graph + metadata
+   ↓ (4) FastAPI Service
+REST APIs (ingest/query/snapshot/stats)
+   ↓ (5) Next.js UI
+3D Neural Graph & natural-language answers
+   ↓ (6) Sentinel Agent
+Autonomous healing & stale data remediation
+```
+
+Each stage emits logging/metrics so you can trace any fact from ingestion to visualization.
 
 ---
 
@@ -423,6 +462,13 @@ Action: Mark old fact as invalid, store new fact
    - Build a company knowledge base
    - Connect related information
    - Keep it automatically updated
+
+5. **Enterprise Data Pipelines**
+   - Use Sentinel as a fact-normalization layer between internal crawlers and BI tools
+   - Swap in compliance-approved providers (Azure OpenAI, AWS Bedrock) by retargeting LiteLLM
+
+6. **Local-First AI Workbenches**
+   - Run entirely offline with Ollama + Neo4j Desktop for privacy-sensitive research
 
 ---
 

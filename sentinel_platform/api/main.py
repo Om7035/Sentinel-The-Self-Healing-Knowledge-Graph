@@ -4,6 +4,8 @@ FastAPI application for Sentinel Knowledge Graph API.
 
 from __future__ import annotations
 
+import asyncio
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -17,7 +19,13 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sentinel_core import GraphManager, GraphException
+from sentinel_core import (
+    GraphManager, 
+    GraphException, 
+    Sentinel, 
+    GraphExtractor
+)
+from sentinel_core.scraper import get_scraper
 from .query_engine import QueryEngine
 
 logger = structlog.get_logger(__name__)
@@ -51,11 +59,19 @@ class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str
     timestamp: str
+    agent_status: str = "unknown"
 
 
-# Initialize GraphManager (in production, use dependency injection)
-graph_manager = None
-sentinel_agent = None
+# Global instances
+graph_manager: Optional[GraphManager] = None
+sentinel_agent: Optional[Sentinel] = None
+
+# Global system status
+system_status = {
+    "state": "Idle",
+    "message": "Waiting for tasks...",
+    "last_update": datetime.utcnow().isoformat()
+}
 
 
 def get_graph_manager() -> GraphManager:
@@ -66,29 +82,37 @@ def get_graph_manager() -> GraphManager:
     return graph_manager
 
 
+def update_status(state: str, message: str):
+    """Update the global system status."""
+    global system_status
+    system_status["state"] = state
+    system_status["message"] = message
+    system_status["last_update"] = datetime.utcnow().isoformat()
+    logger.info("status_updated", state=state, message=message)
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
     logger.info("api_starting_up")
     
-    # Initialize graph manager
-    manager = get_graph_manager()
+    global graph_manager, sentinel_agent
     
-    # Initialize Sentinel Agent (Phase 4)
     try:
-        from sentinel_core import SentinelScraper, GraphExtractor, Sentinel
-        import asyncio
-        import os
+        # Initialize graph manager
+        graph_manager = get_graph_manager()
         
-        global sentinel_agent
+        # Initialize Sentinel Agent components
+        # 1. Scraper (Auto-detects best available)
+        scraper = get_scraper()
+        logger.info(f"scraper_initialized", type=scraper.get_name())
         
-        # Get API keys from environment
-        firecrawl_key = os.getenv("FIRECRAWL_API_KEY", "fc_test_key")
+        # 2. Extractor
+        model_name = os.getenv("OLLAMA_MODEL", "ollama/llama3")
+        extractor = GraphExtractor(model_name=model_name)
         
-        scraper = SentinelScraper(api_key=firecrawl_key)
-        extractor = GraphExtractor(model_name="ollama/llama3")
-        
-        sentinel_agent = Sentinel(manager, scraper, extractor)
+        # 3. Sentinel Orchestrator
+        sentinel_agent = Sentinel(graph_manager, scraper, extractor)
         
         # Start healing loop in background
         asyncio.create_task(sentinel_agent.run_healing_loop(
@@ -104,51 +128,6 @@ async def startup_event():
     logger.info("api_started")
 
 
-# ---------------------------------------------------------
-# Phase 3: New Endpoints
-# ---------------------------------------------------------
-
-class JobRequest(BaseModel):
-    url: str
-
-class JobResponse(BaseModel):
-    task_id: str
-    status: str
-
-@app.post("/job", response_model=JobResponse, status_code=202)
-async def submit_job(job: JobRequest):
-    """
-    Submit a URL for processing (Async).
-    
-    Enqueues a Celery task to scrape, diff, and extract knowledge.
-    """
-    from .celery_app import process_url_task
-    
-    task = process_url_task.delay(job.url)
-    logger.info("job_submitted", url=job.url, task_id=task.id)
-    
-    return {
-        "task_id": task.id,
-        "status": "submitted"
-    }
-
-@app.get("/graph/history", response_model=GraphSnapshotResponse)
-async def get_graph_history(timestamp: datetime = Query(..., description="ISO timestamp for time-travel query")):
-    """
-    Get the graph state at a specific point in time.
-    
-    Returns edges that were valid at the given timestamp.
-    """
-    manager = get_graph_manager()
-    
-    try:
-        snapshot = manager.get_graph_snapshot(timestamp)
-        return snapshot
-    except Exception as e:
-        logger.error("history_query_failed", timestamp=timestamp, error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
@@ -157,7 +136,8 @@ async def shutdown_event():
     global graph_manager, sentinel_agent
     
     if sentinel_agent:
-        sentinel_agent.stop()
+        # sentinel_agent.stop() # If stop method exists
+        pass
         
     if graph_manager:
         graph_manager.close()
@@ -171,6 +151,7 @@ async def root():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
+        "agent_status": "running" if sentinel_agent else "stopped"
     }
 
 
@@ -182,7 +163,7 @@ async def health():
         manager.verify_connectivity()
         
         # Check agent status
-        agent_status = "running" if sentinel_agent and sentinel_agent.is_running else "stopped"
+        agent_status = "running" if sentinel_agent else "stopped"
         
         return {
             "status": "healthy",
@@ -192,6 +173,12 @@ async def health():
     except Exception as e:
         logger.error("health_check_failed", error=str(e))
         raise HTTPException(status_code=503, detail="Service unhealthy")
+
+
+@app.get("/api/status")
+async def get_status():
+    """Get current system status."""
+    return system_status
 
 
 @app.get("/api/graph-snapshot", response_model=GraphSnapshotResponse)
@@ -207,16 +194,6 @@ async def get_graph_snapshot(
 
     This endpoint implements time-travel queries, allowing you to see
     what the knowledge graph looked like at any point in the past.
-
-    Args:
-        timestamp: ISO 8601 timestamp (optional, defaults to now)
-
-    Returns:
-        Graph snapshot with nodes and links in react-force-graph-3d format
-
-    Example:
-        GET /api/graph-snapshot
-        GET /api/graph-snapshot?timestamp=2024-01-15T12:00:00Z
     """
     logger.info("graph_snapshot_requested", timestamp=timestamp)
 
@@ -224,6 +201,7 @@ async def get_graph_snapshot(
         manager = get_graph_manager()
 
         # Parse timestamp if provided
+        dt = None
         if timestamp:
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -232,8 +210,6 @@ async def get_graph_snapshot(
                     status_code=400,
                     detail=f"Invalid timestamp format: {e}. Use ISO 8601 format.",
                 )
-        else:
-            dt = None  # Will default to now
 
         # Get snapshot
         snapshot = manager.get_graph_snapshot(timestamp=dt)
@@ -258,12 +234,7 @@ async def get_graph_snapshot(
 
 @app.get("/api/stats")
 async def get_stats():
-    """
-    Get statistics about the knowledge graph.
-
-    Returns:
-        Statistics including node count, edge count, etc.
-    """
+    """Get statistics about the knowledge graph."""
     try:
         manager = get_graph_manager()
 
@@ -289,44 +260,51 @@ class IngestRequest(BaseModel):
     url: str
 
 
+@app.post("/api/ingest")
+async def ingest_url(request: IngestRequest):
+    """
+    Ingest a URL into the knowledge graph using the Sentinel pipeline.
+    """
+    logger.info("ingest_requested", url=request.url)
+    
+    if not sentinel_agent:
+        raise HTTPException(status_code=503, detail="Sentinel agent not initialized")
+    
+    try:
+        update_status("Processing", f"Processing {request.url}...")
+        
+        # Use the Sentinel agent to process the URL
+        result = await sentinel_agent.process_url(request.url)
+        
+        status = result.get("status")
+        if status == "success":
+            msg = f"Successfully processed {request.url}. Extracted {result.get('extracted_nodes', 0)} nodes."
+            update_status("Idle", msg)
+        elif status == "unchanged_verified":
+            msg = f"Content unchanged for {request.url}. Verified existing data."
+            update_status("Idle", msg)
+        else:
+            msg = f"Processed {request.url} with status: {status}"
+            update_status("Idle", msg)
+            
+        return result
+
+    except Exception as e:
+        logger.error("ingest_failed", error=str(e))
+        update_status("Error", f"Failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class QueryRequest(BaseModel):
     """Request model for natural language queries."""
     question: str
     timestamp: Optional[str] = None
 
 
-# Global system status
-system_status = {
-    "state": "Idle",
-    "message": "Waiting for tasks...",
-    "last_update": datetime.utcnow().isoformat()
-}
-
-def update_status(state: str, message: str):
-    """Update the global system status."""
-    global system_status
-    system_status["state"] = state
-    system_status["message"] = message
-    system_status["last_update"] = datetime.utcnow().isoformat()
-    logger.info("status_updated", state=state, message=message)
-
-@app.get("/api/status")
-async def get_status():
-    """Get current system status."""
-    return system_status
-
 @app.post("/api/query")
 async def query_graph(request: QueryRequest):
     """
     Answer a natural language question about the knowledge graph.
-    
-    Phase 5: Explainable Retrieval
-    Returns the answer and the path the AI traversed.
-    
-    Example questions:
-    - "How much does Stripe cost?"
-    - "Who is the CEO of SpaceX?"
-    - "What changed recently?"
     """
     logger.info("query_received", question=request.question)
     
@@ -351,72 +329,7 @@ async def query_graph(request: QueryRequest):
         logger.error("query_failed", question=request.question, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/ingest")
-async def ingest_url(request: IngestRequest):
-    """
-    Manually ingest a URL into the knowledge graph.
-    """
-    logger.info("ingest_requested", url=request.url)
-    
-    try:
-        update_status("Scraping", f"Reading content from {request.url}...")
-        
-        # Import here to avoid circular imports
-        from sentinel_core import SentinelScraper, InfoExtractor
-        import os
-        from dotenv import load_dotenv
-        
-        # Load environment variables
-        load_dotenv()
-        
-        api_key = os.getenv("FIRECRAWL_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="FIRECRAWL_API_KEY not found in environment variables")
-        
-        # 1. Scrape
-        scraper = SentinelScraper(api_key=api_key)
-        scraped_data = await scraper.scrape_url(request.url)
-        
-        if not scraped_data or not scraped_data.get("markdown"):
-            raise HTTPException(status_code=400, detail="Failed to scrape content")
-            
-        # 2. Extract
-        update_status("Extracting", "Using AI to find facts and relationships...")
-        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.1")
-        extractor = InfoExtractor(model=ollama_model)
-        
-        from fastapi.concurrency import run_in_threadpool
-        triples = await run_in_threadpool(extractor.extract_triples, scraped_data["markdown"])
-        
-        # 3. Update Graph
-        update_status("Updating Graph", f"Saving {len(triples)} new facts to Neo4j...")
-        manager = get_graph_manager()
-        count = 0
-        for triple in triples:
-            manager.upsert_temporal_edge(
-                source_node=triple.head,
-                relation_type=triple.relation,
-                target_node=triple.tail,
-                source_url=request.url,
-                confidence=triple.confidence
-            )
-            count += 1
-            
-        update_status("Idle", f"Successfully processed {request.url}")
-        
-        return {
-            "status": "success", 
-            "message": f"Extracted {count} facts from {request.url}",
-            "triples_count": count
-        }
-
-    except Exception as e:
-        logger.error("ingest_failed", error=str(e))
-        update_status("Error", f"Failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)

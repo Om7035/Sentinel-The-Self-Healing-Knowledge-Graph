@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+import httpx
 import instructor
 import litellm
 import structlog
@@ -35,7 +36,7 @@ class GraphExtractor:
 
     def __init__(
         self,
-        model_name: str = "ollama/llama3",
+        model_name: str = "ollama/phi3",
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         temperature: float = 0.1,
@@ -69,6 +70,50 @@ class GraphExtractor:
             base_url=self.base_url,
             temperature=self.temperature,
         )
+
+    def check_connection(self) -> bool:
+        """
+        Verify connection to the LLM provider.
+        
+        For Ollama: Attempts to connect to localhost:11434
+        For other providers: Checks if API key is set
+        
+        Returns:
+            True if connection is available
+            
+        Raises:
+            ExtractionException: If connection check fails with helpful guidance
+        """
+        try:
+            if "ollama" in self.model_name.lower():
+                # Check Ollama connection
+                try:
+                    response = httpx.get(f"{self.base_url}/api/tags", timeout=5)
+                    if response.status_code == 200:
+                        logger.info("ollama_connection_verified", base_url=self.base_url)
+                        return True
+                except Exception as e:
+                    logger.error("ollama_connection_failed", error=str(e))
+                    raise ExtractionException(
+                        f"❌ Cannot connect to Ollama at {self.base_url}\n"
+                        f"Please ensure Ollama is running: ollama serve\n"
+                        f"Error: {str(e)}"
+                    ) from e
+            else:
+                # For cloud providers, check if API key is set
+                if not self.api_key:
+                    raise ExtractionException(
+                        f"❌ No API key found for {self.model_name}\n"
+                        f"Please set the LLM_API_KEY environment variable"
+                    )
+                logger.info("api_key_configured", model=self.model_name)
+                return True
+                
+        except ExtractionException:
+            raise
+        except Exception as e:
+            logger.error("connection_check_failed", error=str(e))
+            raise ExtractionException(f"Connection check failed: {e}") from e
 
     def extract(self, text: str) -> GraphData:
         """
@@ -124,7 +169,7 @@ Text:
 {text}"""
 
             # Use instructor to get structured output
-            response: GraphData = self.client(
+            response: GraphData = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},

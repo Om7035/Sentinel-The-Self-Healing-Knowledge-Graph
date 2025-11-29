@@ -4,15 +4,16 @@ Sentinel Core - Self-Healing Knowledge Graph Library
 This is the pip-installable library that provides core Sentinel functionality:
 - Graph storage with temporal validity tracking (Neo4j)
 - LLM-based entity and relationship extraction (LiteLLM + Instructor)
-- Web scraping with Firecrawl
+- Web scraping with Firecrawl or local fallback
 - Autonomous healing orchestration
 
 Usage:
-    from sentinel_core import Sentinel, GraphManager, GraphExtractor, SentinelScraper
+    from sentinel_core import Sentinel, GraphManager, GraphExtractor
+    from sentinel_core.scraper import get_scraper
     
     # Initialize components
     graph = GraphManager()
-    scraper = SentinelScraper(api_key="your_key")
+    scraper = get_scraper()  # Auto-selects best available scraper
     extractor = GraphExtractor(model_name="ollama/llama3")
     
     # Create Sentinel orchestrator
@@ -24,7 +25,7 @@ Usage:
 
 from .extractor import InfoExtractor, ExtractionException
 from .graph_extractor import GraphExtractor
-from .graph_store import GraphManager, GraphException
+from .graph_store import Neo4jStore, GraphManager, GraphException
 from .models import (
     GraphNode,
     TemporalEdge,
@@ -32,9 +33,12 @@ from .models import (
     GraphData,
     ScrapedContent,
     HealingResult,
+    ScrapeResult,
 )
 from .orchestrator import Sentinel
-from .scraper import SentinelScraper, ScraperException
+
+# Note: Scraper module is imported separately to avoid circular imports
+# Use: from sentinel_core.scraper import get_scraper, LocalScraper, FirecrawlScraper
 
 __version__ = "0.1.0"
 
@@ -43,23 +47,23 @@ __all__ = [
     "Sentinel",
     
     # Core components
-    "GraphManager",
+    "Neo4jStore",
+    "GraphManager",  # Backward compatibility alias
     "InfoExtractor",
-    "GraphExtractor",  # New: LiteLLM + Instructor extractor
-    "SentinelScraper",
+    "GraphExtractor",  # LiteLLM + Instructor extractor
     
     # Models
     "GraphNode",
     "TemporalEdge",
     "GraphTriple",
-    "GraphData",  # New: Container for nodes and edges
+    "GraphData",  # Container for nodes and edges
     "ScrapedContent",
     "HealingResult",
+    "ScrapeResult",  # New: Standardized scraper output
     
     # Exceptions
     "GraphException",
     "ExtractionException",
-    "ScraperException",
     
     # Version
     "__version__",

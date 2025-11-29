@@ -19,7 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from .graph_extractor import GraphExtractor
 from .graph_store import GraphManager
-from .scraper import SentinelScraper
+from .scraper.base import BaseScraper
 
 logger = structlog.get_logger(__name__)
 
@@ -35,7 +35,7 @@ class Sentinel:
     def __init__(
         self,
         graph_manager: GraphManager,
-        scraper: SentinelScraper,
+        scraper: BaseScraper,
         extractor: GraphExtractor,
         config: Optional[dict] = None,
     ) -> None:
@@ -44,7 +44,7 @@ class Sentinel:
         
         Args:
             graph_manager: Initialized GraphManager
-            scraper: Initialized SentinelScraper
+            scraper: Initialized scraper (any BaseScraper implementation)
             extractor: Initialized GraphExtractor
             config: Optional configuration dictionary
         """
@@ -81,8 +81,10 @@ class Sentinel:
             current_hash = self.graph.get_document_state(url)
             logger.debug("current_document_state", url=url, hash=current_hash)
             
-            # 2. Scrape and hash
-            markdown, new_hash = await self.scraper.scrape_and_hash(url)
+            # 2. Scrape and hash (using new scraper interface)
+            scrape_result = await self.scraper.scrape(url)
+            markdown = scrape_result.content
+            new_hash = scrape_result.content_hash
             
             # 3. Diff Logic
             if current_hash == new_hash:
@@ -145,6 +147,7 @@ class Sentinel:
                 "url": url,
                 "error": str(e)
             }
+
 
     async def run_healing_cycle(self, days_threshold: int = 7) -> dict:
         """

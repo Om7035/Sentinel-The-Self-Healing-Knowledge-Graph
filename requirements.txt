@@ -21,7 +21,7 @@ lxml>=4.9.0
 ollama>=0.1.0
 langchain-community>=0.0.10
 litellm>=1.0.0  # Model-agnostic LLM API
-instructor>=0.4.0  # Output-strict schema enforcement
+instructor>=1.13.0  # Output-strict schema enforcement (requires 1.13.0+ for from_litellm)
 
 # API Framework
 fastapi>=0.108.0

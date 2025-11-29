@@ -188,3 +188,44 @@ class HealingResult(BaseModel):
     triples_updated: int = Field(default=0, description="Number of triples updated in graph")
     error: Optional[str] = Field(None, description="Error message if healing failed")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="When healing occurred")
+
+
+class ScrapeResult(BaseModel):
+    """Standardized result from any scraper implementation.
+    
+    This model ensures consistency between different scraper backends
+    (Firecrawl, Local, etc.) and provides all necessary data for processing.
+    """
+    
+    url: str = Field(..., description="Source URL that was scraped")
+    content: str = Field(..., description="Scraped content in markdown format")
+    content_hash: str = Field(..., description="SHA-256 hash of the content for change detection")
+    title: Optional[str] = Field(None, description="Page title if available")
+    metadata: dict = Field(default_factory=dict, description="Additional metadata (scraper type, timestamp, etc.)")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="When the scraping occurred")
+    
+    @classmethod
+    def compute_content_hash(cls, content: str) -> str:
+        """Compute SHA-256 hash of content.
+        
+        Args:
+            content: The content to hash
+            
+        Returns:
+            SHA-256 hash as hexadecimal string
+        """
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()
+    
+    class Config:
+        """Pydantic config."""
+        json_schema_extra = {
+            "example": {
+                "url": "https://example.com",
+                "content": "# Example Page\n\nThis is the content...",
+                "content_hash": "a7f3c2d1...",
+                "title": "Example Page",
+                "metadata": {"scraper": "local", "user_agent": "Mozilla/5.0..."},
+                "timestamp": "2024-01-15T10:00:00Z"
+            }
+        }
+
