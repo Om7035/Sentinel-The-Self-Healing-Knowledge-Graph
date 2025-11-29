@@ -99,7 +99,7 @@ temp/
 # Legacy directories (to be removed)
 frontend/
 backend/
-scripts/
+
 config/
 
 # Docker volumes

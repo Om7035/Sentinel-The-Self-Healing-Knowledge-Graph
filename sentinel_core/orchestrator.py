@@ -86,12 +86,19 @@ class Sentinel:
             
             # 3. Diff Logic
             if current_hash == new_hash:
-                logger.info("content_unchanged_skipping", url=url)
+                logger.info("content_unchanged_updating_verification", url=url)
+                
+                # Update verification timestamps even if content hasn't changed
+                # This prevents the node from remaining "stale"
+                edges_updated = self.graph.mark_edges_verified(url)
+                self.graph.update_document_state(url, new_hash)
+                
                 return {
-                    "status": "skipped",
+                    "status": "unchanged_verified",
                     "reason": "content_unchanged",
                     "url": url,
-                    "hash": new_hash
+                    "hash": new_hash,
+                    "edges_updated": edges_updated
                 }
             
             logger.info(

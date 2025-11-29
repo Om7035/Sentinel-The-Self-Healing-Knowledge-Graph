@@ -1,118 +1,466 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-import { Activity, Database, Network, Search } from 'lucide-react';
-import GraphVisualization from '../components/GraphVisualization';
-import TimeControl from '../components/TimeControl';
+import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 
-// API Base URL - in production this should be env var
-const API_URL = 'http://localhost:8000';
+// Dynamically import ForceGraph3D to avoid SSR issues
+const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
+  ssr: false,
+});
+
+interface Node {
+  id: string;
+  name: string;
+  val: number;
+}
+
+interface Link {
+  source: string;
+  target: string;
+  relation: string;
+  confidence: number;
+  source_url: string;
+}
+
+interface GraphData {
+  nodes: Node[];
+  links: Link[];
+  metadata: {
+    timestamp: string;
+    node_count: number;
+    link_count: number;
+  };
+}
 
 export default function Home() {
-    const [graphData, setGraphData] = useState({ nodes: [], links: [] });
-    const [loading, setLoading] = useState(false);
-    const [urlInput, setUrlInput] = useState('');
-    const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [graphData, setGraphData] = useState<GraphData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [timestamp, setTimestamp] = useState<Date>(new Date());
+  const [minDate, setMinDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  const [maxDate] = useState<Date>(new Date());
+  const [status, setStatus] = useState<{ state: string; message: string; last_update: string } | null>(null);
+  const [urlInput, setUrlInput] = useState<string>('');
+  const [isIngesting, setIsIngesting] = useState<boolean>(false);
+  const [ingestError, setIngestError] = useState<string | null>(null);
+  const [queryInput, setQueryInput] = useState<string>('');
+  const [queryAnswer, setQueryAnswer] = useState<string | null>(null);
+  const [highlightedPath, setHighlightedPath] = useState<string[]>([]);
+  const [isQuerying, setIsQuerying] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const fgRef = useRef<any>();
 
-    // Fetch graph history
-    const fetchGraphHistory = useCallback(async (timestamp: string) => {
-        try {
-            // Don't set loading true here to avoid flickering on slider drag
-            const response = await axios.get(`${API_URL}/graph/history`, {
-                params: { timestamp }
-            });
-            setGraphData(response.data);
-        } catch (error) {
-            console.error("Failed to fetch graph history:", error);
+  // Fetch graph data
+  const fetchGraphData = async (date: Date) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const timestampParam = date.toISOString();
+      const response = await fetch(
+        `http://localhost:8000/api/graph-snapshot?timestamp=${timestampParam}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: GraphData = await response.json();
+      setGraphData(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch graph data');
+      console.error('Error fetching graph data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch system status
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/status');
+        if (response.ok) {
+          const data = await response.json();
+          setStatus(data);
+          // If active, refresh graph data occasionally
+          if (data.state !== 'Idle' && data.state !== 'Error') {
+            fetchGraphData(timestamp);
+          }
         }
-    }, []);
-
-    // Submit new job
-    const submitJob = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!urlInput) return;
-
-        try {
-            setJobStatus('Submitting...');
-            const response = await axios.post(`${API_URL}/job`, { url: urlInput });
-            setJobStatus(`Job submitted! Task ID: ${response.data.task_id}`);
-            setUrlInput('');
-
-            // Clear status after 3 seconds
-            setTimeout(() => setJobStatus(null), 3000);
-        } catch (error) {
-            console.error("Failed to submit job:", error);
-            setJobStatus('Failed to submit job');
-        }
+      } catch (err) {
+        console.error('Failed to fetch status:', err);
+      }
     };
 
-    return (
-        <main className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
-            {/* Header */}
-            <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-10">
-                <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Network className="w-6 h-6 text-blue-500" />
-                        <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-                            Sentinel Platform
-                        </h1>
-                    </div>
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 2000); // Poll every 2 seconds
+    return () => clearInterval(interval);
+  }, [timestamp]);
 
-                    <div className="flex items-center gap-4 text-sm text-slate-400">
-                        <div className="flex items-center gap-1">
-                            <Database className="w-4 h-4" />
-                            <span>Neo4j Connected</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Activity className="w-4 h-4 text-emerald-500" />
-                            <span>System Healthy</span>
-                        </div>
-                    </div>
-                </div>
-            </header>
+  // Initial load
+  useEffect(() => {
+    fetchGraphData(timestamp);
+  }, []);
 
-            {/* Main Content */}
-            <div className="flex-1 container mx-auto px-4 py-6 flex flex-col gap-6">
+  // Handle timestamp change
+  const handleTimestampChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = new Date(parseInt(e.target.value));
+    setTimestamp(newDate);
+    fetchGraphData(newDate);
+  };
 
-                {/* Job Submission */}
-                <div className="bg-slate-900 p-4 rounded-lg border border-slate-800">
-                    <form onSubmit={submitJob} className="flex gap-4">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                            <input
-                                type="url"
-                                placeholder="Enter URL to process..."
-                                value={urlInput}
-                                onChange={(e) => setUrlInput(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-md py-2 pl-10 pr-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                        <button
-                            type="submit"
-                            disabled={!urlInput}
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Process
-                        </button>
-                    </form>
-                    {jobStatus && (
-                        <div className="mt-2 text-sm text-emerald-400 font-mono">
-                            {jobStatus}
-                        </div>
-                    )}
-                </div>
+  // Handle URL submission for ingestion
+  const handleUrlSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urlInput.trim()) return;
 
-                {/* Graph Visualization Area */}
-                <div className="flex-1 relative min-h-[500px] flex flex-col gap-4">
-                    <GraphVisualization data={graphData} />
+    setIsIngesting(true);
+    setIngestError(null);
 
-                    {/* Floating Time Control */}
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4">
-                        <TimeControl onChange={fetchGraphHistory} />
-                    </div>
-                </div>
+    try {
+      const response = await fetch('http://localhost:8000/api/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlInput.trim() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to ingest URL');
+      }
+
+      const data = await response.json();
+      alert(`✅ Success! Extracted ${data.triples_count} facts from ${urlInput}`);
+      setUrlInput('');
+
+      // Refresh graph data
+      fetchGraphData(timestamp);
+    } catch (err) {
+      setIngestError(err instanceof Error ? err.message : 'Failed to ingest URL');
+      console.error('Error ingesting URL:', err);
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  // Handle natural language query (Phase 5)
+  const handleQuery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!queryInput.trim()) return;
+
+    setIsQuerying(true);
+    setQueryAnswer(null);
+    setHighlightedPath([]);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: queryInput.trim(),
+          timestamp: timestamp.toISOString()
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to execute query');
+      }
+
+      const data = await response.json();
+      setQueryAnswer(data.answer);
+      setHighlightedPath(data.path || []);
+
+      // Focus on the path in the graph
+      if (fgRef.current && data.path && data.path.length > 0 && graphData) {
+        const firstNode = graphData.nodes.find((n: any) => n.id === data.path[0]);
+        if (firstNode && (firstNode as any).x !== undefined) {
+          fgRef.current.cameraPosition(
+            { x: (firstNode as any).x, y: (firstNode as any).y, z: (firstNode as any).z + 200 },
+            firstNode,
+            1000
+          );
+        }
+      }
+    } catch (err) {
+      setQueryAnswer(err instanceof Error ? `Error: ${err.message}` : 'Failed to execute query');
+      console.error('Error executing query:', err);
+    } finally {
+      setIsQuerying(false);
+    }
+  };
+
+  // Format date for display
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
+      {/* Header */}
+      <header className="flex-none bg-black/30 backdrop-blur-md border-b border-purple-500/30 z-30 relative">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+                🛡️ Sentinel Knowledge Graph
+              </h1>
+              <p className="text-purple-200 mt-1">
+                Self-Healing Temporal Knowledge Graph Visualization
+              </p>
             </div>
-        </main>
-    );
+
+            {/* URL Input Form */}
+            <form onSubmit={handleUrlSubmit} className="flex gap-2">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="Enter URL to analyze (e.g., stripe.com/pricing)"
+                className="px-4 py-2 w-96 bg-slate-800/50 border border-purple-500/30 rounded-lg text-purple-100 placeholder-purple-300/50 focus:outline-none focus:border-purple-500"
+                disabled={isIngesting}
+              />
+              <button
+                type="submit"
+                disabled={isIngesting || !urlInput.trim()}
+                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {isIngesting ? '⏳ Analyzing...' : '🔍 Analyze'}
+              </button>
+            </form>
+          </div>
+
+          {/* Error Display */}
+          {ingestError && (
+            <div className="mt-3 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-red-200 text-sm">
+              ❌ {ingestError}
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <div className="flex-1 relative overflow-hidden">
+        {/* Main Graph Visualization - Full Screen */}
+        <div className="absolute inset-0 bg-black/20 z-0">
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm z-10">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-purple-500 mx-auto"></div>
+                <p className="text-purple-300 mt-4">Loading graph...</p>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm z-10">
+              <div className="bg-red-900/50 border border-red-500 rounded-lg p-6 max-w-md">
+                <h3 className="text-red-300 font-bold text-lg mb-2">Error</h3>
+                <p className="text-red-200">{error}</p>
+                <button
+                  onClick={() => fetchGraphData(timestamp)}
+                  className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+
+          {graphData && !loading && (
+            <ForceGraph3D
+              ref={fgRef}
+              graphData={graphData}
+              nodeLabel="name"
+              nodeAutoColorBy="id"
+              nodeVal={(node: any) => node.val * 3}
+              linkLabel={(link: any) => link.relation}
+              linkWidth={(link: any) => highlightedPath.includes(link.source.id || link.source) && highlightedPath.includes(link.target.id || link.target) ? 4 : 2}
+              linkColor={(link: any) => highlightedPath.includes(link.source.id || link.source) && highlightedPath.includes(link.target.id || link.target) ? '#ff00ff' : 'rgba(255,255,255,0.2)'}
+              linkDirectionalArrowLength={3.5}
+              linkDirectionalArrowRelPos={1}
+              linkCurvature={0.25}
+              linkDirectionalParticles={2}
+              linkDirectionalParticleSpeed={0.005}
+              backgroundColor="rgba(0,0,0,0)"
+              nodeResolution={16}
+              nodeOpacity={0.9}
+              enableNodeDrag={true}
+              onNodeDragEnd={(node: any) => {
+                node.fx = node.x;
+                node.fy = node.y;
+                node.fz = node.z;
+              }}
+              onNodeClick={(node: any) => {
+                if (fgRef.current) {
+                  fgRef.current.cameraPosition(
+                    { x: node.x, y: node.y, z: node.z + 200 },
+                    node,
+                    1000
+                  );
+                }
+              }}
+            />
+          )}
+        </div>
+
+        {/* Controls */}
+        <div className="absolute top-4 right-4 z-30 flex gap-2">
+          <button
+            onClick={() => {
+              if (fgRef.current) {
+                fgRef.current.cameraPosition({ x: 0, y: 0, z: 500 }, { x: 0, y: 0, z: 0 }, 1000);
+              }
+            }}
+            className="p-2 bg-slate-800/80 text-purple-300 rounded-lg border border-purple-500/30 hover:bg-slate-700 transition-all"
+            title="Reset View"
+          >
+            🔄 Reset
+          </button>
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 bg-slate-800/80 text-purple-300 rounded-lg border border-purple-500/30 hover:bg-slate-700 transition-all"
+          >
+            {isSidebarOpen ? '👉 Hide Sidebar' : '👈 Show Sidebar'}
+          </button>
+        </div>
+
+        {/* Floating Sidebar */}
+        <div
+          className={`absolute top-0 right-0 bottom-0 w-96 bg-black/60 backdrop-blur-xl border-l border-purple-500/30 p-6 overflow-y-auto z-20 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
+        >
+          {/* Query Interface (Phase 5) */}
+          <div className="bg-slate-900/80 rounded-xl p-4 border border-purple-500/30 shadow-lg shadow-purple-900/20 mb-6">
+            <h2 className="text-lg font-bold text-purple-300 mb-3 flex items-center gap-2">
+              <span>💬</span> Ask Sentinel
+            </h2>
+            <form onSubmit={handleQuery} className="flex flex-col gap-3">
+              <input
+                type="text"
+                value={queryInput}
+                onChange={(e) => setQueryInput(e.target.value)}
+                placeholder="e.g., Who founded SpaceX?"
+                className="px-3 py-2 bg-slate-800/50 border border-purple-500/30 rounded-lg text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500 text-sm"
+                disabled={isQuerying}
+              />
+              <button
+                type="submit"
+                disabled={isQuerying || !queryInput.trim()}
+                className="px-4 py-2 bg-purple-600/80 hover:bg-purple-600 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-50"
+              >
+                {isQuerying ? 'Thinking...' : 'Ask Question'}
+              </button>
+            </form>
+
+            {queryAnswer && (
+              <div className="mt-4 p-3 bg-purple-900/20 border border-purple-500/20 rounded-lg">
+                <p className="text-purple-100 text-sm leading-relaxed">{queryAnswer}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Live Status Panel */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-purple-300 mb-4 flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${status?.state === 'Idle' ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+                <span className={`relative inline-flex rounded-full h-3 w-3 ${status?.state === 'Idle' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+              </span>
+              System Status
+            </h2>
+            <div className={`rounded-lg p-4 border ${status?.state === 'Error' ? 'bg-red-900/30 border-red-500/30' : 'bg-slate-800/50 border-purple-500/30'}`}>
+              <div className="text-sm font-bold text-white mb-1">
+                {status?.state || 'Connecting...'}
+              </div>
+              <div className="text-xs text-purple-200">
+                {status?.message || 'Establishing connection to Sentinel core...'}
+              </div>
+            </div>
+          </div>
+
+          <h2 className="text-xl font-bold text-purple-300 mb-4">
+            📊 Graph Statistics
+          </h2>
+
+          {graphData && (
+            <div className="space-y-4">
+              <div className="bg-purple-900/30 rounded-lg p-4 border border-purple-500/30">
+                <div className="text-purple-200 text-sm">Nodes (Entities)</div>
+                <div className="text-3xl font-bold text-purple-400">
+                  {graphData.metadata.node_count}
+                </div>
+              </div>
+
+              <div className="bg-pink-900/30 rounded-lg p-4 border border-pink-500/30">
+                <div className="text-pink-200 text-sm">Links (Facts)</div>
+                <div className="text-3xl font-bold text-pink-400">
+                  {graphData.metadata.link_count}
+                </div>
+              </div>
+
+              <div className="bg-blue-900/30 rounded-lg p-4 border border-blue-500/30">
+                <div className="text-blue-200 text-sm">Timestamp</div>
+                <div className="text-sm font-mono text-blue-400" suppressHydrationWarning>
+                  {formatDate(timestamp)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-8">
+            <h3 className="text-lg font-bold text-purple-300 mb-3">
+              🧠 About This Graph
+            </h3>
+            <div className="text-sm text-purple-200 space-y-3 bg-slate-900/40 p-4 rounded-lg border border-purple-500/20">
+              <p>
+                <strong className="text-purple-400">What is this?</strong><br />
+                This is a visual map of knowledge extracted by AI.
+              </p>
+              <p>
+                <strong className="text-purple-400">Nodes (Dots)</strong><br />
+                Represent people, companies, places, or concepts found in the text.
+              </p>
+              <p>
+                <strong className="text-purple-400">Links (Lines)</strong><br />
+                Represent facts connecting them (e.g., "Elon Musk" —FOUNDED→ "SpaceX").
+              </p>
+              <p className="text-xs italic opacity-70">
+                Drag to rotate. Scroll to zoom. Use the slider below to time-travel.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Time Slider (Footer) */}
+      <div className="flex-none bg-black/50 backdrop-blur-md border-t border-purple-500/30 p-4 z-30 relative">
+        <div className="container mx-auto">
+          <div className="flex items-center gap-4">
+            <div className="text-purple-300 text-sm font-mono whitespace-nowrap" suppressHydrationWarning>
+              {formatDate(minDate)}
+            </div>
+            <input
+              type="range"
+              min={minDate.getTime()}
+              max={maxDate.getTime()}
+              value={timestamp.getTime()}
+              onChange={handleTimestampChange}
+              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            />
+            <div className="text-purple-300 text-sm font-mono whitespace-nowrap" suppressHydrationWarning>
+              {formatDate(maxDate)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

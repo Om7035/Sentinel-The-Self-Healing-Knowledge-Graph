@@ -179,8 +179,11 @@ class GraphManager:
         try:
             with self.driver.session(database=self.database) as session:
                 query = f"""
-                MATCH (source:Entity {{name: $source_name}})
-                      -[r:{relation_type}]->(target:Entity {{name: $target_name}})
+                MATCH (source)
+                WHERE (source.id = $source_name OR source.name = $source_name)
+                MATCH (target)
+                WHERE (target.id = $target_name OR target.name = $target_name)
+                MATCH (source)-[r:{relation_type}]->(target)
                 WHERE r.valid_to IS NULL
                 RETURN r.content_hash AS hash
                 """
@@ -311,11 +314,11 @@ class GraphManager:
 
         # First, ensure both nodes exist (create if they don't)
         create_nodes_query = """
-        MERGE (source:Entity {name: $source_name})
-        ON CREATE SET source.created_at = datetime($now)
+        MERGE (source {name: $source_name})
+        ON CREATE SET source:Entity, source.created_at = datetime($now)
         
-        MERGE (target:Entity {name: $target_name})
-        ON CREATE SET target.created_at = datetime($now)
+        MERGE (target {name: $target_name})
+        ON CREATE SET target:Entity, target.created_at = datetime($now)
         
         RETURN source, target
         """
@@ -329,8 +332,8 @@ class GraphManager:
 
         # Check if an active relationship exists
         check_query = """
-        MATCH (source:Entity {name: $source_name})
-              -[r]->(target:Entity {name: $target_name})
+        MATCH (source {name: $source_name})
+              -[r]->(target {name: $target_name})
         WHERE type(r) = $relation_type
           AND r.valid_to IS NULL
         RETURN r, id(r) AS rel_id
@@ -348,8 +351,8 @@ class GraphManager:
         if existing_rel:
             # Active relationship exists - update last_verified
             update_query = f"""
-            MATCH (source:Entity {{name: $source_name}})
-                  -[r:{relation_type}]->(target:Entity {{name: $target_name}})
+            MATCH (source {{name: $source_name}})
+                  -[r:{relation_type}]->(target {{name: $target_name}})
             WHERE r.valid_to IS NULL
             SET r.last_verified = datetime($now),
                 r.verification_count = coalesce(r.verification_count, 0) + 1
@@ -375,8 +378,8 @@ class GraphManager:
         else:
             # No active relationship - create new one
             create_query = f"""
-            MATCH (source:Entity {{name: $source_name}})
-            MATCH (target:Entity {{name: $target_name}})
+            MATCH (source {{name: $source_name}})
+            MATCH (target {{name: $target_name}})
             CREATE (source)-[r:{relation_type}]->(target)
             SET r.valid_from = datetime($now),
                 r.valid_to = NULL,
@@ -608,8 +611,10 @@ class GraphManager:
         now = datetime.utcnow()
         
         query = f"""
-        MATCH (source {{id: $source_id}})-[r:{relation}]->(target {{id: $target_id}})
-        WHERE r.valid_to IS NULL
+        MATCH (source)-[r:{relation}]->(target)
+        WHERE (source.id = $source_id OR source.name = $source_id)
+          AND (target.id = $target_id OR target.name = $target_id)
+          AND r.valid_to IS NULL
         SET r.last_verified = datetime($now),
             r.verification_count = coalesce(r.verification_count, 0) + 1
         RETURN id(r) AS rel_id
@@ -728,9 +733,10 @@ class GraphManager:
         now = datetime.utcnow()
 
         query = f"""
-        MATCH (source:Entity {{name: $source_name}})
-              -[r:{relation_type}]->(target:Entity {{name: $target_name}})
-        WHERE r.valid_to IS NULL
+        MATCH (source)-[r:{relation_type}]->(target)
+        WHERE (source.id = $source_name OR source.name = $source_name)
+          AND (target.id = $target_name OR target.name = $target_name)
+          AND r.valid_to IS NULL
         SET r.valid_to = datetime($now)
         RETURN id(r) AS rel_id
         """
@@ -765,7 +771,7 @@ class GraphManager:
             with self.driver.session(database=self.database) as session:
                 if entity_name:
                     query = """
-                    MATCH (source:Entity)-[r]->(target:Entity)
+                    MATCH (source)-[r]->(target)
                     WHERE r.valid_to IS NULL
                       AND (source.name = $entity_name OR target.name = $entity_name)
                     RETURN source.name AS source,
@@ -779,7 +785,7 @@ class GraphManager:
                     result = session.run(query, entity_name=entity_name)
                 else:
                     query = """
-                    MATCH (source:Entity)-[r]->(target:Entity)
+                    MATCH (source)-[r]->(target)
                     WHERE r.valid_to IS NULL
                     RETURN source.name AS source,
                            type(r) AS relation,
@@ -809,8 +815,90 @@ class GraphManager:
             logger.error("failed_to_get_active_relationships", error=str(e))
             raise GraphException(f"Failed to get active relationships: {e}") from e
 
-    def find_stale_nodes(self, days_threshold: int = 7) -> list[str]:
+    def get_document_state(self, url: str) -> Optional[str]:
         """
+        Retrieve the stored content hash for a document.
+        
+        Args:
+            url: Document URL
+            
+        Returns:
+            Stored hash or None if document doesn't exist
+        """
+        try:
+            with self.driver.session(database=self.database) as session:
+                query = """
+                MATCH (d:Document {url: $url})
+                RETURN d.content_hash AS hash
+                """
+                result = session.run(query, url=url)
+                record = result.single()
+                return record["hash"] if record else None
+        except Exception as e:
+            logger.error("failed_to_get_document_state", url=url, error=str(e))
+            return None
+
+    def update_document_state(self, url: str, content_hash: str) -> None:
+        """
+        Update the stored content hash for a document.
+        
+        Args:
+            url: Document URL
+            content_hash: New content hash
+        """
+        try:
+            with self.driver.session(database=self.database) as session:
+                query = """
+                MERGE (d:Document {url: $url})
+                ON CREATE SET d.created_at = datetime($now)
+                SET d.content_hash = $hash,
+                    d.last_updated = datetime($now),
+                    d.updated_at = datetime($now)
+                """
+                session.run(
+                    query,
+                    url=url,
+                    hash=content_hash,
+                    now=datetime.utcnow().isoformat()
+                )
+                logger.info("document_state_updated", url=url, hash=content_hash)
+        except Exception as e:
+            logger.error("failed_to_update_document_state", url=url, error=str(e))
+            raise GraphException(f"Failed to update document state: {e}") from e
+
+    def mark_edges_verified(self, url: str) -> int:
+        """
+        Update last_verified timestamp for all active edges from a source URL.
+        
+        Args:
+            url: Source URL
+            
+        Returns:
+            Number of edges updated
+        """
+        try:
+            with self.driver.session(database=self.database) as session:
+                query = """
+                MATCH (source)-[r]->(target)
+                WHERE r.source_url = $url
+                  AND r.valid_to IS NULL
+                SET r.last_verified = datetime($now)
+                RETURN count(r) as updated_count
+                """
+                result = session.run(
+                    query,
+                    url=url,
+                    now=datetime.utcnow().isoformat()
+                )
+                count = result.single()["updated_count"]
+                logger.info("edges_marked_verified", url=url, count=count)
+                return count
+        except Exception as e:
+            logger.error("failed_to_mark_edges_verified", url=url, error=str(e))
+            raise GraphException(f"Failed to mark edges verified: {e}") from e
+
+    def find_stale_nodes(self, days_threshold: int = 7) -> list[str]:
+        '''
         Find URLs that haven't been verified in > days_threshold days.
         
         Phase 4: Autonomous Healing
@@ -824,13 +912,13 @@ class GraphManager:
 
         Raises:
             GraphException: If the query fails
-        """
+        '''
         logger.info("finding_stale_nodes", days_threshold=days_threshold)
 
         try:
             with self.driver.session(database=self.database) as session:
                 query = """
-                MATCH (source:Entity)-[r]->(target:Entity)
+                MATCH (source)-[r]->(target)
                 WHERE r.valid_to IS NULL
                   AND r.last_verified < datetime() - duration({days: $days_threshold})
                 RETURN DISTINCT r.source_url AS source_url,
@@ -870,33 +958,26 @@ class GraphManager:
         timestamp: Optional[datetime] = None,
     ) -> dict[str, Any]:
         """
-        Get a snapshot of the knowledge graph at a specific point in time.
-
-        This implements time-travel queries by retrieving all nodes and edges
-        that were valid at the given timestamp.
-
+        Get the state of the graph at a specific point in time.
+        
+        Phase 3: Time Travel
+        
         Args:
-            timestamp: Point in time to query (defaults to now)
-
+            timestamp: The point in time to query (defaults to now)
+            
         Returns:
-            Dictionary with:
-                - nodes: List of node objects for react-force-graph-3d
-                - links: List of link objects for react-force-graph-3d
-                - metadata: Additional information about the snapshot
-
-        Raises:
-            GraphException: If the query fails
+            List of relationships active at that time
         """
         if timestamp is None:
             timestamp = datetime.utcnow()
-
-        logger.info("getting_graph_snapshot", timestamp=timestamp.isoformat())
-
+            
+        logger.info("getting_graph_snapshot", timestamp=timestamp)
+        
         try:
             with self.driver.session(database=self.database) as session:
                 # Query for edges valid at the timestamp
                 query = """
-                MATCH (source:Entity)-[r]->(target:Entity)
+                MATCH (source)-[r]->(target)
                 WHERE r.valid_from <= datetime($timestamp)
                   AND (r.valid_to >= datetime($timestamp) OR r.valid_to IS NULL)
                 RETURN source.name AS source_name,
@@ -908,128 +989,42 @@ class GraphManager:
                        r.source_url AS source_url,
                        r.last_verified AS last_verified
                 """
-
+                
                 result = session.run(query, timestamp=timestamp.isoformat())
-
-                # Build nodes and links for react-force-graph-3d
-                nodes_dict = {}  # Use dict to avoid duplicates
+                
+                nodes = {}
                 links = []
-
                 for record in result:
                     source_name = record["source_name"]
                     target_name = record["target_name"]
-                    relation_type = record["relation_type"]
-
-                    # Add source node if not already present
-                    if source_name not in nodes_dict:
-                        nodes_dict[source_name] = {
-                            "id": source_name,
-                            "name": source_name,
-                            "val": 1,  # Node size
-                        }
-
-                    # Add target node if not already present
-                    if target_name not in nodes_dict:
-                        nodes_dict[target_name] = {
-                            "id": target_name,
-                            "name": target_name,
-                            "val": 1,
-                        }
-
-                    # Helper to safely convert dates
-                    def to_iso(dt):
-                        if dt is None:
-                            return None
-                        if hasattr(dt, 'iso_format'):
-                            return dt.iso_format()
-                        if hasattr(dt, 'isoformat'):
-                            return dt.isoformat()
-                        return str(dt)
-
-                    # Add link
+                    
+                    # Add nodes if not present
+                    if source_name not in nodes:
+                        nodes[source_name] = {"id": source_name, "name": source_name, "val": 1}
+                    if target_name not in nodes:
+                        nodes[target_name] = {"id": target_name, "name": target_name, "val": 1}
+                    
                     links.append({
                         "source": source_name,
                         "target": target_name,
-                        "relation": relation_type,
+                        "relation": record["relation_type"],
+                        "valid_from": record["valid_from"].isoformat() if record["valid_from"] else None,
+                        "valid_to": record["valid_to"].isoformat() if record["valid_to"] else None,
                         "confidence": record["confidence"],
                         "source_url": record["source_url"],
-                        "valid_from": to_iso(record["valid_from"]),
-                        "valid_to": to_iso(record["valid_to"]),
-                        "last_verified": to_iso(record["last_verified"]),
+                        "last_verified": record["last_verified"].isoformat() if record["last_verified"] else None,
                     })
-
-                # Convert nodes dict to list
-                nodes = list(nodes_dict.values())
-
-                logger.info(
-                    "graph_snapshot_retrieved",
-                    timestamp=timestamp.isoformat(),
-                    num_nodes=len(nodes),
-                    num_links=len(links),
-                )
-
+                    
                 return {
-                    "nodes": nodes,
+                    "nodes": list(nodes.values()),
                     "links": links,
                     "metadata": {
                         "timestamp": timestamp.isoformat(),
                         "node_count": len(nodes),
-                        "link_count": len(links),
-                    },
+                        "link_count": len(links)
+                    }
                 }
-
+                
         except Exception as e:
             logger.error("failed_to_get_graph_snapshot", error=str(e))
             raise GraphException(f"Failed to get graph snapshot: {e}") from e
-
-    def get_document_state(self, url: str) -> Optional[str]:
-        """
-        Get the last known content hash for a document (URL).
-
-        Args:
-            url: The URL of the document
-
-        Returns:
-            The SHA-256 hash of the content when it was last processed, or None if not found.
-        """
-        try:
-            with self.driver.session(database=self.database) as session:
-                query = """
-                MATCH (d:Document {url: $url})
-                RETURN d.last_content_hash as hash
-                """
-                result = session.run(query, url=url)
-                record = result.single()
-                return record["hash"] if record else None
-        except Exception as e:
-            logger.error("failed_to_get_document_state", url=url, error=str(e))
-            return None
-
-    def update_document_state(self, url: str, content_hash: str) -> None:
-        """
-        Update the content hash for a document (URL).
-
-        Args:
-            url: The URL of the document
-            content_hash: The new SHA-256 hash of the content
-        """
-        try:
-            with self.driver.session(database=self.database) as session:
-                query = """
-                MERGE (d:Document {url: $url})
-                SET d.last_content_hash = $hash,
-                    d.last_updated = datetime()
-                """
-                session.run(query, url=url, hash=content_hash)
-                logger.info("document_state_updated", url=url, hash=content_hash)
-        except Exception as e:
-            logger.error("failed_to_update_document_state", url=url, error=str(e))
-            raise GraphException(f"Failed to update document state: {e}") from e
-
-    def __enter__(self) -> GraphManager:
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Context manager exit - close driver."""
-        self.close()

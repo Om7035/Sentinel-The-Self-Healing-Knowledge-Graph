@@ -210,7 +210,7 @@ def test_neo4j_upsert_data():
         relationships = graph.get_active_relationships()
         assert len(relationships) > 0
         
-        print("✅ Neo4j upsert_data test passed!")
+        print("Neo4j upsert_data test passed!")
         
     finally:
         graph.close()
@@ -300,7 +300,7 @@ def test_time_travel_query():
         snapshot_now = graph.get_graph_snapshot()
         assert len(snapshot_now["links"]) == 1
         
-        print("✅ Time-travel query test passed!")
+        print("Time-travel query test passed!")
         print(f"   - Old edge (history): valid_from={time1}, valid_to={time2}")
         print(f"   - New edge (current): valid_from={time2}, valid_to=NULL")
         
