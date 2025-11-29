@@ -202,6 +202,26 @@ export default function Home() {
     });
   };
 
+  // Memoize neighbors for efficient lookup
+  const neighbors = useMemo(() => {
+    if (!graphData) return new Map();
+    const map = new Map();
+    graphData.links.forEach((link: any) => {
+      const sourceId = link.source.id || link.source;
+      const targetId = link.target.id || link.target;
+
+      if (!map.has(sourceId)) map.set(sourceId, []);
+      if (!map.has(targetId)) map.set(targetId, []);
+
+      map.get(sourceId).push(targetId);
+      map.get(targetId).push(sourceId);
+    });
+    return map;
+  }, [graphData]);
+
+  // Track drag state
+  const dragOffsets = useRef<Map<string, { x: number, y: number, z: number }>>(new Map());
+
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
       {/* Header */}
@@ -293,12 +313,51 @@ export default function Home() {
               nodeResolution={16}
               nodeOpacity={0.9}
               enableNodeDrag={true}
+              onNodeDrag={(node: any) => {
+                // Cluster Dragging Logic
+                // 1. If this is the first drag frame (offsets empty), calculate offsets
+                if (dragOffsets.current.size === 0) {
+                  const neighborIds = neighbors.get(node.id) || [];
+                  neighborIds.forEach((neighborId: string) => {
+                    const neighbor = graphData.nodes.find((n: any) => n.id === neighborId);
+                    if (neighbor) {
+                      dragOffsets.current.set(neighborId, {
+                        x: neighbor.x - node.x,
+                        y: neighbor.y - node.y,
+                        z: neighbor.z - node.z
+                      });
+                    }
+                  });
+                }
+
+                // 2. Update neighbor positions based on dragged node position + offset
+                dragOffsets.current.forEach((offset, neighborId) => {
+                  const neighbor = graphData.nodes.find((n: any) => n.id === neighborId);
+                  if (neighbor) {
+                    neighbor.fx = node.x + offset.x;
+                    neighbor.fy = node.y + offset.y;
+                    neighbor.fz = node.z + offset.z;
+                  }
+                });
+              }}
               onNodeDragEnd={(node: any) => {
-                // Do NOT fix position (fx, fy, fz) so physics continues
-                // and connected nodes move with the dragged node
+                // 1. Release the dragged node
                 node.fx = null;
                 node.fy = null;
                 node.fz = null;
+
+                // 2. Release all neighbors
+                dragOffsets.current.forEach((_, neighborId) => {
+                  const neighbor = graphData.nodes.find((n: any) => n.id === neighborId);
+                  if (neighbor) {
+                    neighbor.fx = null;
+                    neighbor.fy = null;
+                    neighbor.fz = null;
+                  }
+                });
+
+                // 3. Clear offsets
+                dragOffsets.current.clear();
               }}
               warmupTicks={100}
               cooldownTicks={100}
