@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
+import * as THREE from 'three';
 
 // Dynamically import ForceGraph3D with no SSR
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
@@ -28,6 +29,21 @@ export default function GraphVisualization({ data }: GraphVisualizationProps) {
         linkLabel: "relation",
         linkWidth: 1.5,
         linkOpacity: 0.7,
+        nodeThreeObject: (node: { color?: string }) => {
+            const sphere = new THREE.Mesh(
+                new THREE.SphereGeometry(5),
+                new THREE.MeshBasicMaterial({
+                    color: node.color || '#00ff00',
+                    transparent: true,
+                    opacity: 0.9
+                })
+            );
+            sphere.add(new THREE.PointLight(node.color || '#00ff00', 1, 15));
+            return sphere;
+        },
+        linkCurvature: 0.25,
+        linkDirectionalParticles: 4,
+        linkDirectionalParticleSpeed: 0.005,
     }), []);
 
     return (
