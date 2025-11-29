@@ -294,10 +294,14 @@ export default function Home() {
               nodeOpacity={0.9}
               enableNodeDrag={true}
               onNodeDragEnd={(node: any) => {
-                node.fx = node.x;
-                node.fy = node.y;
-                node.fz = node.z;
+                // Do NOT fix position (fx, fy, fz) so physics continues
+                // and connected nodes move with the dragged node
+                node.fx = null;
+                node.fy = null;
+                node.fz = null;
               }}
+              warmupTicks={100}
+              cooldownTicks={100}
               onNodeClick={(node: any) => {
                 if (fgRef.current) {
                   fgRef.current.cameraPosition(
