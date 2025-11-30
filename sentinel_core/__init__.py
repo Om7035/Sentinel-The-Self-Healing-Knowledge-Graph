@@ -40,7 +40,7 @@ from .orchestrator import Sentinel
 # Note: Scraper module is imported separately to avoid circular imports
 # Use: from sentinel_core.scraper import get_scraper, LocalScraper, FirecrawlScraper
 
-__version__ = "0.1.0"
+__version__ = "0.1.6"
 
 __all__ = [
     # Main orchestrator

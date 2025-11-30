@@ -2,6 +2,7 @@
 
 **Sentinel** is an autonomous knowledge graph that automatically scrapes, extracts, stores, and maintains structured knowledge from the web. It uses AI to understand content, tracks changes over time, and heals itself when information becomes stale.
 
+[![PyPI version](https://badge.fury.io/py/sentinel-core.svg)](https://badge.fury.io/py/sentinel-core)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -23,14 +24,14 @@
 ### Installation
 
 ```bash
-pip install sentinel-core[all]
+pip install sentinel-core
 ```
 
 ### Setup
 
 ```bash
 # Interactive setup wizard
-python sentinel_cli.py init
+sentinel init
 
 # Or manually create .env file
 cat > .env << EOF
@@ -58,10 +59,10 @@ ollama pull phi3
 
 ```bash
 # Process a URL
-python sentinel_cli.py watch https://stripe.com/pricing
+sentinel watch https://stripe.com/pricing
 
 # Check status
-python sentinel_cli.py status
+sentinel status
 
 # View in UI
 cd sentinel_platform/ui
@@ -102,19 +103,19 @@ asyncio.run(main())
 
 ```bash
 # Show version
-python sentinel_cli.py version
+sentinel version
 
 # Check system status
-python sentinel_cli.py status
+sentinel status
 
 # Process a URL
-python sentinel_cli.py watch https://example.com
+sentinel watch https://example.com
 
 # Run healing cycle
-python sentinel_cli.py heal --days 7
+sentinel heal --days 7
 
 # Interactive setup
-python sentinel_cli.py init
+sentinel init
 ```
 
 ## 🎯 Use Cases
