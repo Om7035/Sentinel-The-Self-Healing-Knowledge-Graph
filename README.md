@@ -6,6 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+<img width="1078" height="461" alt="image" src="https://github.com/user-attachments/assets/0b321486-555d-433c-9b37-c9a99930533b" />
+
+
 ## 🌟 Key Features
 
 - **🤖 Autonomous**: Automatically scrapes, extracts, and updates knowledge
