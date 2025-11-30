@@ -187,6 +187,26 @@ for paper in papers:
 - [CLI Reference](docs/CLI_REFERENCE.md)
 - [Usage Examples](docs/EXAMPLES.md)
 
+## ⚠️ Limitations & Best Practices
+
+### 1. Reliability & Hallucinations
+LLMs can occasionally "hallucinate" relationships or misinterpret complex DOM structures. Sentinel mitigates this by:
+- **Using Firecrawl**: Converts complex JS/HTML into clean Markdown, reducing noise.
+- **Structured Extraction**: Uses `instructor` to enforce strict Pydantic schemas for nodes and edges.
+- **Verification**: The `heal` command re-verifies content hashes before any costly LLM extraction.
+
+### 2. Self-Healing Mechanism
+Sentinel uses a **Hash-based Change Detection** strategy:
+1.  **Monitor**: Checks for nodes that haven't been verified in `days_threshold` (default: 7).
+2.  **Scrape & Hash**: Re-scrapes the URL and computes a SHA-256 hash of the *content*.
+3.  **Diff**: Compares the new hash with the stored hash in Neo4j.
+    - **Match**: Updates the `last_verified` timestamp (Zero LLM cost).
+    - **Mismatch**: Triggers a full LLM extraction and graph update.
+
+### 3. Cost & Scale
+- **LLM Costs**: Frequent updates on large sites can be expensive. Use the `days_threshold` in `sentinel heal` to control frequency.
+- **Storage**: The temporal graph grows over time. Currently, Sentinel does *not* auto-prune old versions. We recommend periodically archiving old `VALID_TO` relationships if storage is a concern.
+
 ## 🛠️ Development
 
 ### Setup Development Environment
