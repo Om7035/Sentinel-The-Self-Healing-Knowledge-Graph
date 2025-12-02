@@ -7,6 +7,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+> [!IMPORTANT]
+> **🚧 Under Active Development**
+> 
+> Sentinel is a **library in progress**. We are working hard to improve stability, add new features, and refine the API. 
+> While the core functionality is ready for testing, expect breaking changes and rapid updates. 
+> 
+> **We are building it and making it better every day!** 🚀
+
 
 ## 🌟 Key Features
 
