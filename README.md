@@ -12,7 +12,7 @@
 > 
 > Please note that a **new release of the Python package is currently in progress**, and it may take some time to complete.
 > 
-> Sentinel is a **library in progress**. We are working hard to improve stability, add new features, and refine the API. 
+> Sentinel is a **library in progress**. We are working hard to improve stability, add new features, and refine it. 
 > While the core functionality is ready for testing, expect breaking changes and rapid updates. 
 > 
 > **We are building it and making it better every day!** 🚀
