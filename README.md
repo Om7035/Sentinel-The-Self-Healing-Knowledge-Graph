@@ -7,15 +7,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-> [!IMPORTANT]
-> **🚧 Python Package New Release In Progress**
+> [!TIP]
+> **� Sentinel Core v0.1.7 is Now Live!**
 > 
-> Please note that a **new release of the Python package is currently in progress**, and it may take some time to complete.
+> The official **sentinel-core** package has been released on PyPI. You can now install it directly via pip.
 > 
-> Sentinel is a **library in progress**. We are working hard to improve stability, add new features, and refine it. 
-> While the core functionality is ready for testing, expect breaking changes and rapid updates. 
+> Sentinel is a production-ready library for autonomous, self-healing knowledge graphs. While we continue to add new features, the core API is stable and ready for use in your RAG pipelines.
 > 
-> **We are building it and making it better every day!** 🚀
+> **Build smarter, faster, and more reliable AI agents today!** �️
 
 
 ## 🌟 Key Features
@@ -285,3 +284,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 If you find Sentinel useful, please consider giving it a star! ⭐
 
+---
+
+**Made with ❤️ by Om Kawale**
